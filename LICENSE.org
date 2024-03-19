@@ -1,0 +1,28 @@
+#+TITLE: GNU NON-FREE DOCUMENTATION LICENSE
+#+AUTHOR: Delyan Kirov
+#+EMAIL: delyan.k.kirov@gmail.com
+#+DATE: [Date]
+
+Copyright (C) [Year] Delyan Kirov.
+
+* GNU NON-FREE DOCUMENTATION LICENSE
+
+This document is subject to the terms and conditions of the GNU Non-Free Documentation License ("License"). You may obtain a copy of the License at [URL to License].
+
+Permission is granted to view, reproduce, and distribute copies of this documentation in any medium, provided that:
+
+1. You retain all copyright notices and other proprietary notices contained in the original documentation.
+
+2. You make no modifications, alterations, or additions to the original documentation.
+
+3. You do not charge any fee or payment for access to or use of this documentation.
+
+4. Any distribution of this documentation, whether in original form or modified form, is accompanied by a copy of this License.
+
+5. Any derivative works based on this documentation, whether in original form or modified form, are distributed under the terms of this License.
+
+This documentation is provided "as is" without any warranty of any kind, either express or implied, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose. The entire risk as to the quality and performance of this documentation is with you.
+
+In no event shall the author(s) or copyright holder(s) be liable for any damages whatsoever arising out of or in connection with the use or performance of this documentation, whether in an action of contract, negligence, or other tortious action.
+
+* END OF LICENSE
