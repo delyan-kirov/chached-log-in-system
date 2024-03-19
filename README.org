@@ -1,24 +1,24 @@
 * Web belote application
 
-* Registration page - 1w
+* TODO Registration page - 1w
 
-** Create overall design in figma
-** Create a simple and secure registration page
-** Create postgres sql database
-** Create front end page
-** Add an email component
+** TODO Create overall design in figma
+** TODO Create a simple and secure registration page
+** TODO Create postgres sql database
+** TODO Create front end page
+** TODO Add an email component
 
-* Sign in page - 1d
+* TODO Sign in page - 1d
 
-** Front-end page
-** Back-end page
+** TODO Front-end page
+** TODO Back-end page
 
-* Lobby - 1d
+* TODO Lobby - 1d
 
-** Front-end page
-** Backend-page
+** TODO Front-end page
+** TODO Backend-page
 
-* Game - 1m
+* TODO Game - 1m
 
-** Think about the design of the game
-** Create a plan for a decent Back-end implementation
+** TODO Think about the design of the game
+** TODO Create a plan for a decent Back-end implementation
