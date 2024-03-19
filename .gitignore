@@ -16,5 +16,8 @@ go.work
 **/yarn-error.log*
 .npm 
 
+# docker and postges data
+data/
+
 # vs code (just in case I decide to use it)
 .vscode
