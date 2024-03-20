@@ -20,6 +20,10 @@ type User struct {
 	Password []byte
 }
 
+type UserSettings struct {
+	id []byte
+}
+
 func AddUser(user User) error {
 	// Connect to db
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
@@ -30,7 +34,7 @@ func AddUser(user User) error {
 	defer db.Close()
 
 	if err != nil {
-		return fmt.Errorf("Could not connect to database: %s\n", err)
+		return fmt.Errorf("[ERROR] Could not connect to database: %s\n", err)
 	}
 
 	fmt.Println("Successfully connected to the PostgreSQL database!")
@@ -57,7 +61,7 @@ func AuthUser(userName string) (User, error) {
 	defer db.Close()
 
 	if err != nil {
-		fmt.Println("Error connecting to database")
+		fmt.Println("[ERROR] Cannot connect to database")
 		return User{}, nil
 	}
 
@@ -68,11 +72,19 @@ func AuthUser(userName string) (User, error) {
 	var user User
 	err = row.Scan(&user.Name, &user.Password)
 	if err != nil {
-		fmt.Println("Could not find user in database")
+		fmt.Println("[ERROR] Could not find user in database")
 		return User{}, err
 	}
 
 	return user, nil
+}
+
+func AddUserSettings() {
+	panic("[TODO]")
+}
+
+func getUserSettings() {
+	panic("[TODO]")
 }
 
 func Connect() {
