@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 
@@ -11,6 +12,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func generateSessionKey() (string, error) {
+	// Generate random bytes
+	randomBytes := make([]byte, 10*6)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return "", fmt.Errorf("[ERROR] Could not generate random key")
+	}
+
+	// Encode random bytes to a hexadecimal string
+	sessionKey := hex.EncodeToString(randomBytes)
+
+	return sessionKey, nil
+}
 
 func main() {
 	// Test DB
@@ -77,6 +92,8 @@ func main() {
 	router.POST("/signin", func(ctx *gin.Context) {
 		// TODO: Add CSRF Protection
 		// TODO: Add Rate limiting
+		// TODO: When authentication is unsuccessful, redirect elsewhere
+		// TODO: Time out the session
 		username := ctx.PostForm("username")
 		password := ctx.PostForm("password")
 
@@ -94,8 +111,15 @@ func main() {
 		}
 
 		// session
-		user_key := 0000 // TODO: make secure random key
+		user_key, err := generateSessionKey()
+		if err != nil {
+			// think how errors print potentially twice
+			fmt.Println("[ERROR] Could not generate session key")
+			return
+		}
 		user_session := sessions.Default(ctx)
+		// Set session expiration time to 30 minutes
+		store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
 		user_session.Set("user_key", user_key)
 		user_session.Set("user_id", user.Name) // TODO: Dont use name, use id
 		user_session.Save()
@@ -120,8 +144,8 @@ func main() {
 		)
 	})
 
-	// run the server
-	router.Run(":8080")
+	// run the server in https
+	router.RunTLS(":8080", "./tests/server.crt", "tests/server.key")
 }
 
 // TODO: Add sessions
