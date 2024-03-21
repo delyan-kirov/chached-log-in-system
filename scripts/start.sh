@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+# Start docker
+sudo systemctl start docker
+
 # Define the container name
 container_name="my-postgres-container"
 
@@ -23,5 +26,5 @@ sudo docker run -d \
 
 # Run the Go application
 echo "Starting Go application..."
-sleep 3 # Add delay before starting the go server
+sleep 2 # Add delay before starting the go server
 go run ./cmd/belote/main.go

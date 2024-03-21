@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net/http"
+	"testing"
 
 	"github.com/delyan-kirov/belote/internal/database"
 	"github.com/gin-contrib/sessions"
@@ -12,7 +13,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func main() {
+func SessionMiddleware(store sessions.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, _ := store.Get(c.Request, "session-name")
+		c.Set("session", session)
+		c.Next()
+	}
+}
+
+func TestMain(t *testing.T) {
+	// TODO: Rework the test module
 	// Test DB
 	fmt.Println("Starting database")
 	database.Connect()
@@ -73,7 +83,6 @@ func main() {
 		)
 	})
 
-	// signin page
 	router.POST("/signin", func(ctx *gin.Context) {
 		// TODO: Add CSRF Protection
 		// TODO: Add Rate limiting
@@ -93,46 +102,19 @@ func main() {
 			return
 		}
 
-		// session
 		user_key := 0000 // TODO: make secure random key
 		user_session := sessions.Default(ctx)
-		user_session.Set("user_key", user_key)
-		user_session.Set("user_id", user.Name) // TODO: Dont use name, use id
+		user_session.Set("user_space", user_key)
 		user_session.Save()
 
-		fmt.Printf("[SUCCESS] The user: %s was successfully authorized.", user.Name)
-		ctx.Redirect(http.StatusSeeOther, "/profile")
-	})
-
-	// user page
-	router.GET("/profile", func(ctx *gin.Context) {
-		user_session := sessions.Default(ctx)
-		user_key := user_session.Get("user_key")
-
-		if user_key == nil {
-			ctx.String(http.StatusUnauthorized, "Unauthorized")
-		}
-
-		user_name := user_session.Get("user_id").(string)
 		ctx.String(
 			http.StatusOK,
-			fmt.Sprintf("User: %s", user_name),
+			"User %s successfully logged in!\nSession is: %b",
+			user.Name,
+			user_key,
 		)
 	})
 
 	// run the server
 	router.Run(":8080")
 }
-
-// TODO: Add sessions
-// TODO: Make site https
-// TODO: What is a middleware
-// TODO: Add redis for the middleware
-// TODO: Properly hash the user key
-// TODO: Make documentation
-// TODO: How do we maintain a user session
-// TODO: Learn more about session cookies and other web stuff
-// TODO: Leanr a bit about security
-// TODO: Create a user session
-// TODO: Does the user session need to be async?
-// TODO: Template bootstrapping
