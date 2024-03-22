@@ -19,39 +19,32 @@
           Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
           eiusmod tempor incididunt ut labore et dolore magna aliqua.
         </p>
-        <body>
-          <div class="container">
-            <h2>Register</h2>
-            <form action="/register" method="post">
-              <label for="username">Username:</label><br />
-              <input type="text" id="username" name="username" required /><br />
-              <label for="password">Password:</label><br />
-              <input
-                type="password"
-                id="password"
-                name="password"
-                required
-              /><br /><br />
-              <input type="submit" value="Register" />
-            </form>
-          </div>
-
-          <div class="container">
-            <h2>Signin</h2>
-            <form action="/signin" method="post">
-              <label for="username">Username:</label><br />
-              <input type="text" id="username" name="username" required /><br />
-              <label for="password">Password:</label><br />
-              <input
-                type="password"
-                id="password"
-                name="password"
-                required
-              /><br /><br />
-              <input type="submit" value="Signin" />
-            </form>
-          </div>
-        </body>
+        <div class="container">
+          <h2>Signin</h2>
+          <form action="/signin" method="post">
+            <label for="username">Username:</label><br />
+            <input type="text" id="username" name="username" required /><br />
+            <label for="password">Password:</label><br />
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+            /><br /><br />
+            <input type="submit" value="Signin" />
+          </form>
+        </div>
+        <hr />
+        <button id="registerButton">Register</button>
+        <script>
+          // Get the button element by its ID
+          const registerButton = document.getElementById("registerButton");
+          // Add a click event listener to the button
+          registerButton.addEventListener("click", function () {
+            // Redirect to register.html when the button is clicked
+            window.location.href = "register";
+          });
+        </script>
       </section>
     </main>
   </body>

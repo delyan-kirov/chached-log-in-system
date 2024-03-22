@@ -13,18 +13,25 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func generateSessionKey() (string, error) {
+func genSession(store cookie.Store, user database.User, ctx *gin.Context) error {
 	// Generate random bytes
 	randomBytes := make([]byte, 10*6)
 	_, err := rand.Read(randomBytes)
 	if err != nil {
-		return "", fmt.Errorf("[ERROR] Could not generate random key")
+		return err
 	}
 
 	// Encode random bytes to a hexadecimal string
-	sessionKey := hex.EncodeToString(randomBytes)
-
-	return sessionKey, nil
+	user_key := hex.EncodeToString(randomBytes)
+	// session
+	user_session := sessions.Default(ctx)
+	// Set session expiration time to 30 minutes
+	store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
+	// Set session
+	user_session.Set("user_key", user_key)
+	user_session.Set("user_id", user.Name) // TODO: Dont use name, use id
+	user_session.Save()
+	return nil
 }
 
 func main() {
@@ -58,6 +65,9 @@ func main() {
 	router.LoadHTMLGlob("templates/*html")
 
 	// register page
+	router.GET("./register", func(ctx *gin.Context) {
+		ctx.HTML(http.StatusOK, "register.html", nil)
+	})
 	router.POST("/register", func(ctx *gin.Context) {
 		// TODO: Check user password length
 		username := ctx.PostForm("username")
@@ -79,13 +89,14 @@ func main() {
 			ctx.String(http.StatusInternalServerError, "Failed to add user to database")
 			return
 		}
-
-		ctx.String(
-			http.StatusOK,
-			"Registered successfully! Username: %s, Password: %s",
-			username,
-			password,
-		)
+		// Clear session if exists
+		err = genSession(store, new_user, ctx)
+		if err != nil {
+			ctx.String(http.StatusUnauthorized, "Could not generate session")
+			fmt.Printf("[ERROR] Could not generate session %s\n", err)
+			return
+		}
+		ctx.Redirect(http.StatusSeeOther, "/profile")
 	})
 
 	// signin page
@@ -111,19 +122,12 @@ func main() {
 		}
 
 		// session
-		user_key, err := generateSessionKey()
+		err = genSession(store, user, ctx)
 		if err != nil {
-			// think how errors print potentially twice
-			fmt.Println("[ERROR] Could not generate session key")
+			ctx.String(http.StatusUnauthorized, "Could not generate session")
+			fmt.Printf("[ERROR] Could not generate session %s\n", err)
 			return
 		}
-		user_session := sessions.Default(ctx)
-		// Set session expiration time to 30 minutes
-		store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
-		user_session.Set("user_key", user_key)
-		user_session.Set("user_id", user.Name) // TODO: Dont use name, use id
-		user_session.Save()
-
 		fmt.Printf("[SUCCESS] The user: %s was successfully authorized.", user.Name)
 		ctx.Redirect(http.StatusSeeOther, "/profile")
 	})
@@ -134,22 +138,20 @@ func main() {
 		user_key := user_session.Get("user_key")
 
 		if user_key == nil {
+			fmt.Println("[ERROR] Session ended or unauthorized")
 			ctx.String(http.StatusUnauthorized, "Unauthorized")
 		}
 
 		user_name := user_session.Get("user_id").(string)
-		ctx.String(
-			http.StatusOK,
-			fmt.Sprintf("User: %s", user_name),
-		)
+		fmt.Printf("[SUCCESS] User %s\n redirected to profile", user_name)
+		ctx.HTML(http.StatusOK, "profile.html", nil)
 	})
 
 	// run the server in https
-	router.RunTLS(":8080", "./tests/server.crt", "tests/server.key")
+	// router.RunTLS(":8080", "./tests/server.crt", "tests/server.key")
+	router.Run(":8080")
 }
 
-// TODO: Add sessions
-// TODO: Make site https
 // TODO: What is a middleware
 // TODO: Add redis for the middleware
 // TODO: Properly hash the user key
@@ -160,3 +162,4 @@ func main() {
 // TODO: Create a user session
 // TODO: Does the user session need to be async?
 // TODO: Template bootstrapping
+// TODO: Desing game
