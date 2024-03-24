@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/delyan-kirov/belote/internal/database"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -35,6 +37,18 @@ func genSession(store cookie.Store, user database.User, ctx *gin.Context) error 
 }
 
 func main() {
+	// Open a file to log stdout and stderr
+	logFile, err := os.Create("./tests/gin_logs.txt")
+	if err != nil {
+		fmt.Printf("Error opening log file: %v\n", err)
+		return
+	}
+	defer logFile.Close()
+
+	// Redirect stdout and stderr to the log file
+	os.Stdout = logFile
+	os.Stderr = logFile
+
 	// Test DB
 	fmt.Println("Starting database")
 	database.Connect()
@@ -44,10 +58,11 @@ func main() {
 	// Initialize Gin
 	fmt.Println("Starting gin")
 	router := gin.Default()
+	router.Use(cors.Default())
 
 	// generate session key
 	session_key := make([]byte, 32)
-	_, err := rand.Read(session_key)
+	_, err = rand.Read(session_key)
 	if err != nil {
 		fmt.Println("Could not generate random key")
 		fmt.Printf("[ERROR] %s\n", err)
@@ -128,7 +143,7 @@ func main() {
 			fmt.Printf("[ERROR] Could not generate session %s\n", err)
 			return
 		}
-		fmt.Printf("[SUCCESS] The user: %s was successfully authorized.", user.Name)
+		fmt.Printf("[SUCCESS] The user: %s was successfully authorized\n", user.Name)
 		ctx.Redirect(http.StatusSeeOther, "/profile")
 	})
 
@@ -143,7 +158,7 @@ func main() {
 		}
 
 		user_name := user_session.Get("user_id").(string)
-		fmt.Printf("[SUCCESS] User %s\n redirected to profile", user_name)
+		fmt.Printf("[SUCCESS] User %s redirected to profile\n", user_name)
 		ctx.HTML(http.StatusOK, "profile.html", nil)
 	})
 
@@ -163,3 +178,5 @@ func main() {
 // TODO: Does the user session need to be async?
 // TODO: Template bootstrapping
 // TODO: Desing game
+// TODO: Implement CORS
+// TODO: [https://chenyitian.gitbooks.io/gin-tutorials/content/tdd/21.html]

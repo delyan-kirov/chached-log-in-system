@@ -1,0 +1,10 @@
+Starting database
+Successfully connected to the PostgreSQL database!
+Table 'users' created successfully!
+Starting gin
+Successfully connected to the PostgreSQL database!
+[SUCCESS] The user: 123 was successfully authorized
+[SUCCESS] User 123 redirected to profile
+Successfully connected to the PostgreSQL database!
+[SUCCESS] The user: 123 was successfully authorized
+[SUCCESS] User 123 redirected to profile
