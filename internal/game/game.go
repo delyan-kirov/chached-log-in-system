@@ -5,6 +5,21 @@ import (
 	"math/rand"
 )
 
+// Game state
+type Game struct {
+	PlayerA Player
+	PlayerB Player
+	round   int
+	End     bool
+	Deck    Deck
+}
+
+// Player hand
+type Player struct {
+	Points int
+	Cards  []Card
+}
+
 type Suit string
 
 const (
@@ -94,3 +109,10 @@ func shuffleDeck(deck Deck) {
 		deck[i], deck[j] = deck[j], deck[i] // Swap the cards at indices i and j
 	}
 }
+
+/*
+	Game loop
+	- Person 1 and 2 connect the game
+	- Person 1 and 2 submit their input
+	- When all player submit, the server updates the frontend
+*/
