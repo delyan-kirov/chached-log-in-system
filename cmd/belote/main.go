@@ -2,10 +2,12 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/delyan-kirov/belote/internal/database"
 	"github.com/gin-contrib/cors"
@@ -14,6 +16,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type gameType struct {
+	key         string
+	playerCount int
+}
+type GameKeys map[string]gameType // TODO: redo in redis
+
+// Initialize gameKeys map
+var gameKeys = make(GameKeys)
 
 func genSession(store cookie.Store, user database.User, ctx *gin.Context) error {
 	// Generate random bytes
@@ -160,6 +171,83 @@ func main() {
 		user_name := user_session.Get("user_id").(string)
 		fmt.Printf("[SUCCESS] User %s redirected to profile\n", user_name)
 		ctx.HTML(http.StatusOK, "profile.html", nil)
+	})
+
+	router.POST("/profile/genGameKey", func(ctx *gin.Context) {
+		user_session := sessions.Default(ctx)
+		user_key := user_session.Get("user_key")
+
+		if user_key == nil {
+			fmt.Println("[ERROR] Session ended or unauthorized")
+			ctx.String(http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+
+		// Generate game key
+		user_name := user_session.Get("user_id").(string)
+
+		// Generate random bytes
+		randomBytes := make([]byte, 32)
+		_, err := rand.Read(randomBytes)
+		if err != nil {
+			fmt.Println("[ERROR] Failed to generate random bytes:", err)
+			ctx.String(http.StatusInternalServerError, "Failed to generate game key")
+			return
+		}
+
+		playerCount, _ := strconv.Atoi(ctx.PostForm("gameType"))
+
+		// Encode random bytes to base32 string
+		gameKey := base64.RawURLEncoding.EncodeToString(randomBytes)
+
+		// Store game key
+		gameKeys[user_name] = gameType{
+			key:         gameKey,
+			playerCount: playerCount,
+		}
+
+		fmt.Printf("[SUCCESS] The key for user %s has been generated: %s\n", user_name, gameKey)
+
+		// Return a success response
+		ctx.JSON(http.StatusOK, gin.H{
+			"message":  "Game key generated successfully",
+			"user":     user_name,
+			"gameKey":  gameKey,
+			"gameType": playerCount,
+		})
+	})
+
+	router.POST("/profile/enterGame", func(ctx *gin.Context) {
+		user_session := sessions.Default(ctx)
+		user_name := user_session.Get("user_id").(string)
+
+		// Retrieve the key holder and game key from the form data
+		keyHolder := ctx.PostForm("keyHolder")
+		gameKey := ctx.PostForm("gameKey")
+
+		// Check the key exists
+		gameType, gameExists := gameKeys[keyHolder]
+		if !gameExists || gameType.key != gameKey {
+			fmt.Println("[ERROR] Game key is invalid")
+			// return error info
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"message":   "Game key is invalid",
+				"key":       gameKey,
+				"keyHolder": keyHolder,
+				"user":      user_name,
+			})
+		} else {
+
+			fmt.Printf("[SUCCESS] Key Holder: %s, Game Key: %s\n", keyHolder, gameKey)
+
+			ctx.JSON(http.StatusOK, gin.H{
+				"message":   "Entering game",
+				"user":      user_name,
+				"keyHolder": keyHolder,
+				"gameKey":   gameKey,
+				"gameType":  gameType.playerCount,
+			})
+		}
 	})
 
 	// run the server in https

@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <title>Belote</title>
+    <!-- Include jQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
   </head>
-
   <body>
     <header>
       <h1>Profile</h1>
@@ -20,6 +21,50 @@
           eiusmod tempor incididunt ut labore et dolore magna aliqua.
         </p>
       </section>
+
+      <form id="genGameKeyForm">
+        <label for="gameType">Game type:</label><br />
+        <input type="number" id="gameType" name="gameType" required /><br />
+        <input type="submit" value="Generate Game Key" />
+      </form>
+
+      <br />
+
+      <section id="gameKeySection" style="display: none">
+        <h3>Generated Game Key:</h3>
+        <p id="gameKeyDisplay"></p>
+      </section>
+
+      <section>
+        <form action="/profile/enterGame" method="post">
+          <label for="keyHolder">Key holder:</label><br />
+          <input type="text" id="keyHolder" name="keyHolder" required /><br />
+          <label for="gameKey">Game key:</label><br />
+          <input type="text" id="gameKey" name="gameKey" required /><br />
+
+          <input type="submit" value="Enter Game" />
+        </form>
+      </section>
     </main>
+
+    <script>
+      $("#genGameKeyForm").submit(function (e) {
+        e.preventDefault(); // Prevent the default form submission
+        var formData = $(this).serialize();
+        $.ajax({
+          type: "POST", // Sending as POST request
+          url: "http://localhost:8080/profile/genGameKey",
+          data: formData,
+          success: function (response) {
+            // Update DOM to display the generated game key
+            $("#gameKeyDisplay").text(response.gameKey);
+            $("#gameKeySection").show(); // Show the section containing the game key
+          },
+          error: function (xhr, status, error) {
+            console.error(error);
+          },
+        });
+      });
+    </script>
   </body>
 </html>

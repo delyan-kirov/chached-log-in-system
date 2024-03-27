@@ -20,6 +20,10 @@ type User struct {
 	Password []byte
 }
 
+func (A User) Equals(B User) bool {
+	return A.Name == B.Name
+}
+
 type UserSettings struct {
 	id []byte
 }

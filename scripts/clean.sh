@@ -10,6 +10,8 @@ if sudo docker ps -a --format '{{.Names}}' | grep -q "^$container_name$"; then
     sudo docker stop $container_name
     echo -n "[REMOVED] "
     sudo docker rm $container_name
+    echo [STOPED] Docker
+    sudo systemctl stop docker
 fi
 
 echo "[DONE]"
