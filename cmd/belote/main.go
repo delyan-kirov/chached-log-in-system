@@ -7,21 +7,25 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 
 	"github.com/delyan-kirov/belote/internal/database"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
+	"github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type gameType struct {
+type GameType struct {
 	key         string
 	playerCount int
+	playerNames []string
 }
-type GameKeys map[string]gameType // TODO: redo in redis
+
+type GameKeys map[string]GameType // TODO: redo in redis
 
 // Initialize gameKeys map
 var gameKeys = make(GameKeys)
@@ -61,13 +65,13 @@ func main() {
 	os.Stderr = logFile
 
 	// Test DB
-	fmt.Println("Starting database")
+	fmt.Println("[DATA] Starting database")
 	database.Connect()
 
 	// server
 
 	// Initialize Gin
-	fmt.Println("Starting gin")
+	fmt.Println("[GIN] Starting gin")
 	router := gin.Default()
 	router.Use(cors.Default())
 
@@ -79,7 +83,13 @@ func main() {
 		fmt.Printf("[ERROR] %s\n", err)
 	}
 
-	store := cookie.NewStore([]byte("secret"))
+	// Initialize Redis client
+	store, err := redis.NewStore(10, "tcp", "localhost:6379", "", []byte("secret"))
+	if err != nil {
+		panic(err)
+	}
+
+	// Use Redis store for session management
 	router.Use(sessions.Sessions("mysession", store))
 
 	// Define a routeroute
@@ -168,23 +178,31 @@ func main() {
 			ctx.String(http.StatusUnauthorized, "Unauthorized")
 		}
 
-		user_name := user_session.Get("user_id").(string)
+		user_name, ok := user_session.Get("user_id").(string)
+
+		if !ok {
+			fmt.Println("[GIN] User session is over")
+			ctx.JSON(http.StatusGatewayTimeout, gin.H{
+				"message": "User session over",
+			})
+		}
+
 		fmt.Printf("[SUCCESS] User %s redirected to profile\n", user_name)
 		ctx.HTML(http.StatusOK, "profile.html", nil)
 	})
 
 	router.POST("/profile/genGameKey", func(ctx *gin.Context) {
-		user_session := sessions.Default(ctx)
-		user_key := user_session.Get("user_key")
+		userSession := sessions.Default(ctx)
+		userKey := userSession.Get("user_key")
 
-		if user_key == nil {
+		if userKey == nil {
 			fmt.Println("[ERROR] Session ended or unauthorized")
 			ctx.String(http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Generate game key
-		user_name := user_session.Get("user_id").(string)
+		userName := userSession.Get("user_id").(string)
 
 		// Generate random bytes
 		randomBytes := make([]byte, 32)
@@ -195,31 +213,58 @@ func main() {
 			return
 		}
 
-		playerCount, _ := strconv.Atoi(ctx.PostForm("gameType"))
+		// Get player count
+		playerCount, err := strconv.Atoi(ctx.PostForm("playerCount"))
+		if err != nil {
+			fmt.Println("[ERROR] Invalid player count:", err)
+			ctx.String(http.StatusBadRequest, "Invalid player count")
+			return
+		}
+
+		// Parse player names
+		var playerNames []string
+		for i := 1; i <= playerCount; i++ {
+			playerName := ctx.PostForm(fmt.Sprintf("name%d", i))
+			if playerName == "" {
+				fmt.Println("[ERROR] Player name is empty")
+				ctx.String(http.StatusBadRequest, "Player name is empty")
+				return
+			}
+			playerNames = append(playerNames, playerName)
+		}
 
 		// Encode random bytes to base32 string
 		gameKey := base64.RawURLEncoding.EncodeToString(randomBytes)
 
 		// Store game key
-		gameKeys[user_name] = gameType{
+		gameKeys[userName] = GameType{
 			key:         gameKey,
 			playerCount: playerCount,
+			playerNames: playerNames,
 		}
 
-		fmt.Printf("[SUCCESS] The key for user %s has been generated: %s\n", user_name, gameKey)
+		fmt.Printf("[SUCCESS] The key for user %s has been generated: %s\n", userName, gameKey)
 
 		// Return a success response
 		ctx.JSON(http.StatusOK, gin.H{
-			"message":  "Game key generated successfully",
-			"user":     user_name,
-			"gameKey":  gameKey,
-			"gameType": playerCount,
+			"message":     "Game key generated successfully",
+			"user":        userName,
+			"gameKey":     gameKey,
+			"playerCount": playerCount,
+			"playerNames": playerNames,
 		})
 	})
 
 	router.POST("/profile/enterGame", func(ctx *gin.Context) {
 		user_session := sessions.Default(ctx)
-		user_name := user_session.Get("user_id").(string)
+		user_name, ok := user_session.Get("user_id").(string)
+
+		if !ok {
+			fmt.Println("[GIN] User session is over")
+			ctx.JSON(http.StatusGatewayTimeout, gin.H{
+				"message": "User session over",
+			})
+		}
 
 		// Retrieve the key holder and game key from the form data
 		keyHolder := ctx.PostForm("keyHolder")
@@ -227,25 +272,31 @@ func main() {
 
 		// Check the key exists
 		gameType, gameExists := gameKeys[keyHolder]
-		if !gameExists || gameType.key != gameKey {
+		playerNames := gameType.playerNames
+		userCanPlay := slices.Contains(playerNames, user_name)
+
+		// TODO: Handle the different cases instead of one check
+		if !gameExists || gameType.key != gameKey || !userCanPlay {
 			fmt.Println("[ERROR] Game key is invalid")
 			// return error info
 			ctx.JSON(http.StatusNotFound, gin.H{
-				"message":   "Game key is invalid",
+				"message":   "Game key is invalid or user unauthorized",
 				"key":       gameKey,
 				"keyHolder": keyHolder,
 				"user":      user_name,
+				"players":   playerNames,
 			})
 		} else {
 
 			fmt.Printf("[SUCCESS] Key Holder: %s, Game Key: %s\n", keyHolder, gameKey)
 
 			ctx.JSON(http.StatusOK, gin.H{
-				"message":   "Entering game",
-				"user":      user_name,
-				"keyHolder": keyHolder,
-				"gameKey":   gameKey,
-				"gameType":  gameType.playerCount,
+				"message":     "Entering game",
+				"user":        user_name,
+				"keyHolder":   keyHolder,
+				"gameKey":     gameKey,
+				"playerCount": gameType.playerCount,
+				"players":     playerNames,
 			})
 		}
 	})
@@ -259,11 +310,6 @@ func main() {
 // TODO: Add redis for the middleware
 // TODO: Properly hash the user key
 // TODO: Make documentation
-// TODO: How do we maintain a user session
-// TODO: Learn more about session cookies and other web stuff
-// TODO: Leanr a bit about security
-// TODO: Create a user session
-// TODO: Does the user session need to be async?
 // TODO: Template bootstrapping
 // TODO: Desing game
 // TODO: Implement CORS

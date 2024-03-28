@@ -1,4 +1,16 @@
-Starting database
+[DATA] Starting database
 Successfully connected to the PostgreSQL database!
 Table 'users' created successfully!
-Starting gin
+[GIN] Starting gin
+[ERROR] Session ended or unauthorized
+[ERROR] Session ended or unauthorized
+[ERROR] Session ended or unauthorized
+Successfully connected to the PostgreSQL database!
+[SUCCESS] The user: john was successfully authorized
+[SUCCESS] User john redirected to profile
+[SUCCESS] The key for user john has been generated: 8zJBfl39_iBTZaf7bApv2BrrzwUyPGDL30eJ1-tMruA
+[SUCCESS] Key Holder: john, Game Key: 8zJBfl39_iBTZaf7bApv2BrrzwUyPGDL30eJ1-tMruA
+[SUCCESS] User john redirected to profile
+Successfully connected to the PostgreSQL database!
+[SUCCESS] The user: 123 was successfully authorized
+[SUCCESS] User 123 redirected to profile

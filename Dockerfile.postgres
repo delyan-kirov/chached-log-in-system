@@ -1,7 +1,7 @@
-# Use the official PostgreSQL image from Docker Hub
+# Use the official PostgreSQL image as base
 FROM postgres
 
-# Set environment variables
+# Set environment variables for PostgreSQL
 ENV POSTGRES_PASSWORD=mysecretpassword
 
 # Expose PostgreSQL port

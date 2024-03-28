@@ -1,30 +1,26 @@
-#!/usr/bin/bash
+#!/bin/bash
 
-# Start docker
-sudo systemctl start docker
-
-# Define the container name
-container_name="my-postgres-container"
-
-# Check if the PostgreSQL container is already running
-if sudo docker ps -a --format '{{.Names}}' | grep -q "^$container_name$"; then
-    echo "PostgreSQL container is already running!"
-    echo -n "[STOPPED] "
-    sudo docker stop $container_name
-    echo -n "[REMOVED] "
-    sudo docker rm $container_name
+# Stop and remove existing PostgreSQL container if it exists
+existing_postgres_container=$(docker ps -aqf "name=my-postgres-container")
+if [ ! -z "$existing_postgres_container" ]; then
+    echo "Removing existing PostgreSQL container..."
+    docker stop $existing_postgres_container
+    docker rm $existing_postgres_container
 fi
 
-# Start the PostgreSQL container
-echo "Starting PostgreSQL container..."
-sudo docker run -d \
-    --name $container_name  \
-    -v $(pwd)/data:/var/lib/postgresql/data \
-    -e POSTGRES_PASSWORD=mysecretpassword \
-    -p 5432:5432 \
-    postgres:latest
+# Stop and remove existing Redis container if it exists
+existing_redis_container=$(docker ps -aqf "name=my-redis-container")
+if [ ! -z "$existing_redis_container" ]; then
+    echo "Removing existing Redis container..."
+    docker stop $existing_redis_container
+    docker rm $existing_redis_container
+fi
+
+# Start Docker Compose
+echo "Starting Docker Compose..."
+docker-compose up -d
 
 # Run the Go application
 echo "Starting Go application..."
-sleep 2 # Add delay before starting the go server
+# sleep 1 # Add delay before starting the go server
 go run ./cmd/belote/main.go
