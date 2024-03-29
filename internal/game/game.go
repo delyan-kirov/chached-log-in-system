@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"math/rand"
 )
 
@@ -14,7 +13,6 @@ type Game struct {
 	Deck    Deck
 }
 
-// Player hand
 type Player struct {
 	Points int
 	Cards  []Card
@@ -24,50 +22,50 @@ type Suit string
 
 const (
 	Hearts   Suit = "Hearts"
-	Diamonds      = "Diamonds"
-	Clubs         = "Clubs"
-	Spades        = "Spades"
+	Diamonds Suit = "Diamonds"
+	Clubs    Suit = "Clubs"
+	Spades   Suit = "Spades"
 )
 
 type Rank string
 
 const (
 	Ace   Rank = "Ace"
-	Two        = "2"
-	Three      = "3"
-	Four       = "4"
-	Five       = "5"
-	Six        = "6"
-	Seven      = "7"
-	Eight      = "8"
-	Nine       = "9"
-	Ten        = "10"
-	Jack       = "Jack"
-	Queen      = "Queen"
-	King       = "King"
+	Two   Rank = "2"
+	Three Rank = "3"
+	Four  Rank = "4"
+	Five  Rank = "5"
+	Six   Rank = "6"
+	Seven Rank = "7"
+	Eight Rank = "8"
+	Nine  Rank = "9"
+	Ten   Rank = "10"
+	Jack  Rank = "Jack"
+	Queen Rank = "Queen"
+	King  Rank = "King"
 )
 
-var suitMap = map[Suit]bool{
-	Hearts:   true,
-	Diamonds: true,
-	Clubs:    true,
-	Spades:   true,
+var suitMap = map[Suit]int{
+	Hearts:   0,
+	Diamonds: 1,
+	Clubs:    2,
+	Spades:   3,
 }
 
-var rankMap = map[Rank]bool{
-	Ace:   true,
-	Two:   true,
-	Three: true,
-	Four:  true,
-	Five:  true,
-	Six:   true,
-	Seven: true,
-	Eight: true,
-	Nine:  true,
-	Ten:   true,
-	Jack:  true,
-	Queen: true,
-	King:  true,
+var rankMap = map[Rank]int{
+	Ace:   0,
+	Two:   1,
+	Three: 2,
+	Four:  3,
+	Five:  4,
+	Six:   5,
+	Seven: 6,
+	Eight: 7,
+	Nine:  8,
+	Ten:   9,
+	Jack:  10,
+	Queen: 11,
+	King:  12,
 }
 
 type Card struct {
@@ -77,30 +75,43 @@ type Card struct {
 
 type Deck []Card
 
-func MkCard(suit Suit, rank Rank) (Card, error) {
+func MkCard(suit Suit, rank Rank) Card {
 	if _, ok := suitMap[suit]; !ok {
-		return Card{}, fmt.Errorf("invalid suit: %s", suit)
+		panic("[TYPE_ERROR] Type error when creating card, no suit of tag: " + suit)
 	}
 
 	if _, ok := rankMap[rank]; !ok {
-		return Card{}, fmt.Errorf("invalid rank: %s", rank)
+		panic("[TYPE_ERROR] Type error when creating card, no rank of tag: " + rank)
 	}
 
-	return Card{Suit: suit, Rank: rank}, nil
+	return Card{Suit: suit, Rank: rank}
 }
 
 func mkDeck() (Deck, error) {
 	var deck Deck
 	for suit := range suitMap {
 		for rank := range rankMap {
-			card, err := MkCard(suit, rank)
-			if err != nil {
-				return deck, err
-			}
+			card := MkCard(suit, rank)
 			deck = append(deck, card)
 		}
 	}
 	return deck, nil
+}
+
+func isMorePowerful(cardA Card, cardB Card) bool {
+	suitApower, _ := suitMap[cardA.Suit]
+	suitBpower, _ := suitMap[cardB.Suit]
+
+	rankApower, _ := suitMap[cardA.Suit]
+	rankBpower, _ := suitMap[cardB.Suit]
+
+	if suitApower > suitBpower {
+		return true
+	} else if suitApower == suitBpower && rankApower > rankBpower {
+		return true
+	} else {
+		return false
+	}
 }
 
 func shuffleDeck(deck Deck) {
