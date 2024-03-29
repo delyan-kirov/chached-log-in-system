@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/delyan-kirov/belote/internal/database"
 	"github.com/gin-contrib/cors"
@@ -18,6 +19,53 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
+	userSession := sessions.DefaultMany(ctx, "userSession")
+	gameSession := sessions.DefaultMany(ctx, "gameSession")
+	userName, ok := userSession.Get("user_id").(string)
+
+	if !ok {
+		fmt.Println("[GIN] User session is over")
+		return gin.H{
+			"status":  http.StatusGatewayTimeout,
+			"message": "User session over",
+		}
+	}
+
+	// Check the key exists
+	gameType, gameExists := gameKeys[keyHolder]
+	playerNames := gameType.playerNames
+	userCanPlay := slices.Contains(playerNames, userName)
+
+	// Check if the game key is invalid or the user is unauthorized
+	if !gameExists || gameType.key != gameKey || !userCanPlay {
+		fmt.Println("[ERROR] Game key is invalid")
+		return gin.H{
+			"status":    http.StatusNotFound,
+			"message":   "Game key is invalid or user unauthorized",
+			"key":       gameKey,
+			"keyHolder": keyHolder,
+			"user":      userName,
+			"players":   playerNames,
+		}
+	}
+
+	fmt.Printf("[SUCCESS] Key Holder: %s, Game Key: %s\n", keyHolder, gameKey)
+
+	// Add the user to the game session
+	gameSession.Set(userName, true)
+
+	return gin.H{
+		"status":      http.StatusOK,
+		"message":     "Entering game queue",
+		"user":        userName,
+		"keyHolder":   keyHolder,
+		"gameKey":     gameKey,
+		"playerCount": gameType.playerCount,
+		"players":     playerNames,
+	}
+}
 
 type GameType struct {
 	key         string
@@ -30,7 +78,7 @@ type GameKeys map[string]GameType // TODO: redo in redis
 // Initialize gameKeys map
 var gameKeys = make(GameKeys)
 
-func genSession(store cookie.Store, user database.User, ctx *gin.Context) error {
+func genUserSession(store cookie.Store, user database.User, ctx *gin.Context) error {
 	// Generate random bytes
 	randomBytes := make([]byte, 10*6)
 	_, err := rand.Read(randomBytes)
@@ -39,15 +87,31 @@ func genSession(store cookie.Store, user database.User, ctx *gin.Context) error 
 	}
 
 	// Encode random bytes to a hexadecimal string
-	user_key := hex.EncodeToString(randomBytes)
-	// session
-	user_session := sessions.Default(ctx)
+	userKey := hex.EncodeToString(randomBytes)
+	userSession := sessions.DefaultMany(ctx, "userSession")
 	// Set session expiration time to 30 minutes
 	store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
 	// Set session
-	user_session.Set("user_key", user_key)
-	user_session.Set("user_id", user.Name) // TODO: Dont use name, use id
-	user_session.Save()
+	userSession.Set("user_key", userKey)
+	userSession.Set("user_id", user.Name) // TODO: Dont use name, use id
+	userSession.Save()
+	return nil
+}
+
+func genGameSession(store cookie.Store, user database.User, ctx *gin.Context) error {
+	// Generate random bytes
+	randomBytes := make([]byte, 10*6)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return err
+	}
+
+	gameSession := sessions.DefaultMany(ctx, "gameSession")
+	// Set session expiration time to 30 minutes
+	store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
+	// Set session
+	gameSession.Set(user.Name, true)
+	gameSession.Save()
 	return nil
 }
 
@@ -75,11 +139,10 @@ func main() {
 	router := gin.Default()
 	router.Use(cors.Default())
 
-	// generate session key
+	// TODO generate session key
 	session_key := make([]byte, 32)
 	_, err = rand.Read(session_key)
 	if err != nil {
-		fmt.Println("Could not generate random key")
 		fmt.Printf("[ERROR] %s\n", err)
 	}
 
@@ -89,8 +152,10 @@ func main() {
 		panic(err)
 	}
 
+	sessionNames := []string{"userSession", "gameSession"}
+
 	// Use Redis store for session management
-	router.Use(sessions.Sessions("mysession", store))
+	router.Use(sessions.SessionsMany(sessionNames, store))
 
 	// Define a routeroute
 	router.GET("/", func(ctx *gin.Context) {
@@ -126,7 +191,7 @@ func main() {
 			return
 		}
 		// Clear session if exists
-		err = genSession(store, new_user, ctx)
+		err = genUserSession(store, new_user, ctx)
 		if err != nil {
 			ctx.String(http.StatusUnauthorized, "Could not generate session")
 			fmt.Printf("[ERROR] Could not generate session %s\n", err)
@@ -158,7 +223,7 @@ func main() {
 		}
 
 		// session
-		err = genSession(store, user, ctx)
+		err = genUserSession(store, user, ctx)
 		if err != nil {
 			ctx.String(http.StatusUnauthorized, "Could not generate session")
 			fmt.Printf("[ERROR] Could not generate session %s\n", err)
@@ -170,15 +235,15 @@ func main() {
 
 	// user page
 	router.GET("/profile", func(ctx *gin.Context) {
-		user_session := sessions.Default(ctx)
-		user_key := user_session.Get("user_key")
+		userSession := sessions.DefaultMany(ctx, "userSession")
+		userKey := userSession.Get("user_key")
 
-		if user_key == nil {
+		if userKey == nil {
 			fmt.Println("[ERROR] Session ended or unauthorized")
 			ctx.String(http.StatusUnauthorized, "Unauthorized")
 		}
 
-		user_name, ok := user_session.Get("user_id").(string)
+		user_name, ok := userSession.Get("user_id").(string)
 
 		if !ok {
 			fmt.Println("[GIN] User session is over")
@@ -192,7 +257,7 @@ func main() {
 	})
 
 	router.POST("/profile/genGameKey", func(ctx *gin.Context) {
-		userSession := sessions.Default(ctx)
+		userSession := sessions.DefaultMany(ctx, "userSession")
 		userKey := userSession.Get("user_key")
 
 		if userKey == nil {
@@ -255,49 +320,46 @@ func main() {
 		})
 	})
 
-	router.POST("/profile/enterGame", func(ctx *gin.Context) {
-		user_session := sessions.Default(ctx)
-		user_name, ok := user_session.Get("user_id").(string)
-
-		if !ok {
-			fmt.Println("[GIN] User session is over")
-			ctx.JSON(http.StatusGatewayTimeout, gin.H{
-				"message": "User session over",
-			})
-		}
-
+	router.POST("/profile/enterGameQueue", func(ctx *gin.Context) {
 		// Retrieve the key holder and game key from the form data
 		keyHolder := ctx.PostForm("keyHolder")
 		gameKey := ctx.PostForm("gameKey")
+		gameQueueData := enterGameQueue(ctx, keyHolder, gameKey)
+		ctx.JSON(
+			gameQueueData["status"].(int),
+			gameQueueData,
+		)
+	})
+
+	// TODO: Replace redis session with another map, probably inmemory go hasmap
+	router.GET("/profile/enterGameQueue", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "Hello")
+	})
+
+	router.GET("/profile/enterGame", func(ctx *gin.Context) {
+		keyHolder := ctx.Query("keyHolder")
+		gameKey := ctx.Query("gameKey")
+		gameQueueData := enterGameQueue(ctx, keyHolder, gameKey)
+		isInQueue := gameQueueData["status"].(int) == http.StatusOK
+
+		gameSession := sessions.DefaultMany(ctx, "gameSession")
 
 		// Check the key exists
-		gameType, gameExists := gameKeys[keyHolder]
+		gameType, _ := gameKeys[keyHolder]
 		playerNames := gameType.playerNames
-		userCanPlay := slices.Contains(playerNames, user_name)
 
-		// TODO: Handle the different cases instead of one check
-		if !gameExists || gameType.key != gameKey || !userCanPlay {
-			fmt.Println("[ERROR] Game key is invalid")
-			// return error info
-			ctx.JSON(http.StatusNotFound, gin.H{
-				"message":   "Game key is invalid or user unauthorized",
-				"key":       gameKey,
-				"keyHolder": keyHolder,
-				"user":      user_name,
-				"players":   playerNames,
-			})
+		fmt.Println("Players: ", strings.Join(playerNames, ", "))
+
+		canEnterGame := true
+		for _, player := range playerNames {
+			playerInQueue, _ := gameSession.Get(player).(bool)
+			fmt.Printf("[DEBUG] Player:  %s is %t\n", player, playerInQueue)
+			canEnterGame = canEnterGame && playerInQueue
+		}
+		if canEnterGame && len(playerNames) > 0 && isInQueue {
+			ctx.String(http.StatusAccepted, "The game can begin")
 		} else {
-
-			fmt.Printf("[SUCCESS] Key Holder: %s, Game Key: %s\n", keyHolder, gameKey)
-
-			ctx.JSON(http.StatusOK, gin.H{
-				"message":     "Entering game",
-				"user":        user_name,
-				"keyHolder":   keyHolder,
-				"gameKey":     gameKey,
-				"playerCount": gameType.playerCount,
-				"players":     playerNames,
-			})
+			ctx.String(http.StatusAccepted, "Not all players are ready %s", gameQueueData)
 		}
 	})
 
@@ -307,6 +369,7 @@ func main() {
 }
 
 // TODO: What is a middleware
+// TODO: Refactor main
 // TODO: Add redis for the middleware
 // TODO: Properly hash the user key
 // TODO: Make documentation
