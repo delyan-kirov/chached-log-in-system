@@ -4,12 +4,16 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
+
+	redisclient "github.com/go-redis/redis/v8"
 
 	"github.com/delyan-kirov/belote/internal/database"
 	"github.com/gin-contrib/cors"
@@ -20,9 +24,29 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// redis NON-session instance
+// TODO Make getters and setter helpers
+// TODO Refactor into data module
+var rdbGameQueue = redisclient.NewClient(&redisclient.Options{
+	Addr:     "localhost:6379", // Redis server address
+	Password: "",               // No password set
+	DB:       1,                // Specify the database index (0 for default)
+})
+
+var rdbGameKey = redisclient.NewClient(&redisclient.Options{
+	Addr:     "localhost:6379", // Redis server address
+	Password: "",               // No password set
+	DB:       2,                // Specify the database index (0 for default)
+})
+
+type GameType struct {
+	Key         string   `json:"key"`
+	PlayerCount int      `json:"playerCount"`
+	PlayerNames []string `json:"playerNames"`
+}
+
 func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 	userSession := sessions.DefaultMany(ctx, "userSession")
-	gameSession := sessions.DefaultMany(ctx, "gameSession")
 	userName, ok := userSession.Get("user_id").(string)
 
 	if !ok {
@@ -34,13 +58,39 @@ func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 	}
 
 	// Check the key exists
-	gameType, gameExists := gameKeys[keyHolder]
-	playerNames := gameType.playerNames
+	gameTypeJson, err := rdbGameKey.Get(ctx, keyHolder).Result()
+	fmt.Printf("[DEBUG] Game type %s\n", gameTypeJson)
+	var gameType GameType
+	var gameExists bool
+	if err == redisclient.Nil {
+		fmt.Printf("[ERROR] Could not find game key %s\n", keyHolder)
+		gameExists = false
+	} else if err != nil {
+		fmt.Printf("[ERROR] %s\n", err)
+		return gin.H{
+			"status":  http.StatusInternalServerError,
+			"message": err.Error(),
+		}
+	} else {
+		err := json.Unmarshal([]byte(gameTypeJson), &gameType)
+		if err != nil {
+			fmt.Printf("[ERROR] Failed to unmarshal game type JSON: %s\n", err.Error())
+			return gin.H{
+				"status":  http.StatusInternalServerError,
+				"message": "Failed to unmarshal game type JSON",
+			}
+		}
+		gameExists = true
+	}
+
+	playerNames := gameType.PlayerNames
+	fmt.Printf("[DEBUG] Player names are: %s\n", playerNames)
 	userCanPlay := slices.Contains(playerNames, userName)
 
 	// Check if the game key is invalid or the user is unauthorized
-	if !gameExists || gameType.key != gameKey || !userCanPlay {
+	if !gameExists || gameType.Key != gameKey || !userCanPlay {
 		fmt.Println("[ERROR] Game key is invalid")
+		fmt.Printf("[DEBUG] Game type: %s\n", gameType.Key)
 		return gin.H{
 			"status":    http.StatusNotFound,
 			"message":   "Game key is invalid or user unauthorized",
@@ -54,7 +104,13 @@ func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 	fmt.Printf("[SUCCESS] Key Holder: %s, Game Key: %s\n", keyHolder, gameKey)
 
 	// Add the user to the game session
-	gameSession.Set(userName, true)
+	err = rdbGameQueue.Set(ctx, userName, "true", 1*time.Hour).Err()
+	if err != nil {
+		return gin.H{
+			"status":  http.StatusInternalServerError,
+			"message": "Could not connect to redis",
+		}
+	}
 
 	return gin.H{
 		"status":      http.StatusOK,
@@ -62,21 +118,10 @@ func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 		"user":        userName,
 		"keyHolder":   keyHolder,
 		"gameKey":     gameKey,
-		"playerCount": gameType.playerCount,
+		"playerCount": gameType.PlayerCount,
 		"players":     playerNames,
 	}
 }
-
-type GameType struct {
-	key         string
-	playerCount int
-	playerNames []string
-}
-
-type GameKeys map[string]GameType // TODO: redo in redis
-
-// Initialize gameKeys map
-var gameKeys = make(GameKeys)
 
 func genUserSession(store cookie.Store, user database.User, ctx *gin.Context) error {
 	// Generate random bytes
@@ -95,23 +140,6 @@ func genUserSession(store cookie.Store, user database.User, ctx *gin.Context) er
 	userSession.Set("user_key", userKey)
 	userSession.Set("user_id", user.Name) // TODO: Dont use name, use id
 	userSession.Save()
-	return nil
-}
-
-func genGameSession(store cookie.Store, user database.User, ctx *gin.Context) error {
-	// Generate random bytes
-	randomBytes := make([]byte, 10*6)
-	_, err := rand.Read(randomBytes)
-	if err != nil {
-		return err
-	}
-
-	gameSession := sessions.DefaultMany(ctx, "gameSession")
-	// Set session expiration time to 30 minutes
-	store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
-	// Set session
-	gameSession.Set(user.Name, true)
-	gameSession.Save()
 	return nil
 }
 
@@ -152,7 +180,7 @@ func main() {
 		panic(err)
 	}
 
-	sessionNames := []string{"userSession", "gameSession"}
+	sessionNames := []string{"userSession"}
 
 	// Use Redis store for session management
 	router.Use(sessions.SessionsMany(sessionNames, store))
@@ -302,11 +330,18 @@ func main() {
 		gameKey := base64.RawURLEncoding.EncodeToString(randomBytes)
 
 		// Store game key
-		gameKeys[userName] = GameType{
-			key:         gameKey,
-			playerCount: playerCount,
-			playerNames: playerNames,
+		gameType, err := json.Marshal(GameType{
+			Key:         gameKey,
+			PlayerCount: playerCount,
+			PlayerNames: playerNames,
+		})
+		if err != nil {
+			fmt.Printf("[ERROR] %s\n", err)
 		}
+
+		fmt.Printf("[DEBUG] Setting gameType as json data %b\n", gameType)
+
+		rdbGameKey.Set(ctx, userName, gameType, 1*time.Hour)
 
 		fmt.Printf("[SUCCESS] The key for user %s has been generated: %s\n", userName, gameKey)
 
@@ -331,7 +366,6 @@ func main() {
 		)
 	})
 
-	// TODO: Replace redis session with another map, probably inmemory go hasmap
 	router.GET("/profile/enterGameQueue", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "Hello")
 	})
@@ -342,17 +376,39 @@ func main() {
 		gameQueueData := enterGameQueue(ctx, keyHolder, gameKey)
 		isInQueue := gameQueueData["status"].(int) == http.StatusOK
 
-		gameSession := sessions.DefaultMany(ctx, "gameSession")
-
 		// Check the key exists
-		gameType, _ := gameKeys[keyHolder]
-		playerNames := gameType.playerNames
+		var gameType GameType
+		gameTypeJson, err := rdbGameKey.Get(ctx, keyHolder).Bytes()
+		if err == redisclient.Nil {
+			fmt.Printf("[ERROR] Game key is not valid %s\n", err)
+			return
+		} else if err != nil {
+			fmt.Printf("[ERROR] %s\n", err)
+			return
+		}
+
+		err = json.Unmarshal(gameTypeJson, &gameType)
+		if err != nil {
+			fmt.Printf("[ERROR] %s\n", err)
+			return
+		}
+
+		playerNames := gameType.PlayerNames
 
 		fmt.Println("Players: ", strings.Join(playerNames, ", "))
 
 		canEnterGame := true
 		for _, player := range playerNames {
-			playerInQueue, _ := gameSession.Get(player).(bool)
+			err := rdbGameQueue.Get(ctx, player).Err()
+			var playerInQueue bool
+			if err == redisclient.Nil {
+				playerInQueue = false
+			} else if err != nil {
+				fmt.Printf("[ERROR] %s\n", err)
+				return
+			} else {
+				playerInQueue = true
+			}
 			fmt.Printf("[DEBUG] Player:  %s is %t\n", player, playerInQueue)
 			canEnterGame = canEnterGame && playerInQueue
 		}
@@ -370,8 +426,6 @@ func main() {
 
 // TODO: What is a middleware
 // TODO: Refactor main
-// TODO: Add redis for the middleware
-// TODO: Properly hash the user key
 // TODO: Make documentation
 // TODO: Template bootstrapping
 // TODO: Desing game
