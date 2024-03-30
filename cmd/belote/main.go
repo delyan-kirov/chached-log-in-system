@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -13,14 +12,13 @@ import (
 	"strings"
 	"time"
 
-	redisclient "github.com/go-redis/redis/v8"
-
 	"github.com/delyan-kirov/belote/internal/database"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
+	redisclient "github.com/go-redis/redis/v8"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -41,6 +39,7 @@ var rdbGameKey = redisclient.NewClient(&redisclient.Options{
 
 type GameType struct {
 	Key         string   `json:"key"`
+	KeyOwner    string   `json:"keyHolder"`
 	PlayerCount int      `json:"playerCount"`
 	PlayerNames []string `json:"playerNames"`
 }
@@ -59,7 +58,6 @@ func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 
 	// Check the key exists
 	gameTypeJson, err := rdbGameKey.Get(ctx, keyHolder).Result()
-	fmt.Printf("[DEBUG] Game type %s\n", gameTypeJson)
 	var gameType GameType
 	var gameExists bool
 	if err == redisclient.Nil {
@@ -104,7 +102,7 @@ func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 	fmt.Printf("[SUCCESS] Key Holder: %s, Game Key: %s\n", keyHolder, gameKey)
 
 	// Add the user to the game session
-	err = rdbGameQueue.Set(ctx, userName, "true", 1*time.Hour).Err()
+	err = rdbGameQueue.Set(ctx, userName, gameTypeJson, 1*time.Hour).Err()
 	if err != nil {
 		return gin.H{
 			"status":  http.StatusInternalServerError,
@@ -123,16 +121,18 @@ func enterGameQueue(ctx *gin.Context, keyHolder string, gameKey string) gin.H {
 	}
 }
 
-func genUserSession(store cookie.Store, user database.User, ctx *gin.Context) error {
-	// Generate random bytes
-	randomBytes := make([]byte, 10*6)
+func genRandomStr(size int) (string, error) {
+	randomBytes := make([]byte, size)
 	_, err := rand.Read(randomBytes)
 	if err != nil {
-		return err
+		return "", err
 	}
+	return hex.EncodeToString(randomBytes), nil
+}
 
+func genUserSession(store cookie.Store, user database.User, ctx *gin.Context) error {
 	// Encode random bytes to a hexadecimal string
-	userKey := hex.EncodeToString(randomBytes)
+	userKey, _ := genRandomStr(10 * 6)
 	userSession := sessions.DefaultMany(ctx, "userSession")
 	// Set session expiration time to 30 minutes
 	store.Options(sessions.Options{MaxAge: 1800, Path: "/", HttpOnly: true})
@@ -168,11 +168,7 @@ func main() {
 	router.Use(cors.Default())
 
 	// TODO generate session key
-	session_key := make([]byte, 32)
-	_, err = rand.Read(session_key)
-	if err != nil {
-		fmt.Printf("[ERROR] %s\n", err)
-	}
+	// session_key, _ := genRandomStr(32)
 
 	// Initialize Redis client
 	store, err := redis.NewStore(10, "tcp", "localhost:6379", "", []byte("secret"))
@@ -297,15 +293,6 @@ func main() {
 		// Generate game key
 		userName := userSession.Get("user_id").(string)
 
-		// Generate random bytes
-		randomBytes := make([]byte, 32)
-		_, err := rand.Read(randomBytes)
-		if err != nil {
-			fmt.Println("[ERROR] Failed to generate random bytes:", err)
-			ctx.String(http.StatusInternalServerError, "Failed to generate game key")
-			return
-		}
-
 		// Get player count
 		playerCount, err := strconv.Atoi(ctx.PostForm("playerCount"))
 		if err != nil {
@@ -326,12 +313,12 @@ func main() {
 			playerNames = append(playerNames, playerName)
 		}
 
-		// Encode random bytes to base32 string
-		gameKey := base64.RawURLEncoding.EncodeToString(randomBytes)
+		gameKey, _ := genRandomStr(60)
 
 		// Store game key
 		gameType, err := json.Marshal(GameType{
 			Key:         gameKey,
+			KeyOwner:    userName,
 			PlayerCount: playerCount,
 			PlayerNames: playerNames,
 		})
@@ -356,14 +343,11 @@ func main() {
 	})
 
 	router.POST("/profile/enterGameQueue", func(ctx *gin.Context) {
-		// Retrieve the key holder and game key from the form data
 		keyHolder := ctx.PostForm("keyHolder")
 		gameKey := ctx.PostForm("gameKey")
 		gameQueueData := enterGameQueue(ctx, keyHolder, gameKey)
-		ctx.JSON(
-			gameQueueData["status"].(int),
-			gameQueueData,
-		)
+		fmt.Println(gameQueueData["keyHolder"])
+		ctx.HTML(http.StatusOK, "queue.html", nil)
 	})
 
 	router.GET("/profile/enterGameQueue", func(ctx *gin.Context) {
