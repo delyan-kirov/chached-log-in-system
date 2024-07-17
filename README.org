@@ -1,24 +1,55 @@
-* Web belote application
+* Cached Log-In System
 
-* TODO Registration page - 1w
+** Project Overview
 
-** TODO Create overall design in figma
-** TODO Create a simple and secure registration page
-** TODO Create postgres sql database
-** TODO Create front end page
-** TODO Add an email component
+The Cached Log-In System is a scalable, high-performance authentication system built using Go, Redis, and PostgreSQL, containerized with Docker. The system leverages Redis for caching user session data to improve log-in speed and PostgreSQL for persistent storage of user credentials and profiles.
 
-* TODO Sign in page - 1d
+** Features
 
-** TODO Front-end page
-** TODO Back-end page
+- User Authentication: Secure log-in and log-out functionalities.
+- Session Management: Efficient session handling using Redis for caching.
+- Persistent Storage: User data stored in PostgreSQL.
+- Dockerized Deployment: Easy setup and deployment with Docker.
 
-* TODO Lobby - 1d
+** Project Structure
 
-** TODO Front-end page
-** TODO Backend-page
+The project is organized into several directories and files as follows:
 
-* TODO Game - 1m
+- Dockerfile: The Docker configuration file for building the application image.
+- docker-compose.yml: The Docker Compose file for setting up the multi-container application.
+- README.md: The project documentation (this file).
+- main.go: The main application code written in Go.
+- config/: Configuration files for the application.
+- handlers/: HTTP handlers for different routes.
+- models/: Database models for PostgreSQL.
+- utils/: Utility functions and helpers.
+- scripts/: Any additional scripts for setup or maintenance.
 
-** TODO Think about the design of the game
-** TODO Create a plan for a decent Back-end implementation
+** Getting Started
+
+To get started with the Cached Log-In System, you will need to have Docker and Docker Compose installed on your machine. Follow the steps below to set up and run the application:
+
+1. Clone the repository:
+#+BEGIN_SRC sh
+git clone https://github.com/yourusername/cached-log-in-system.git
+cd cached-log-in-system
+#+END_SRC
+
+2. Build and run the application using Docker Compose:
+#+BEGIN_SRC sh
+docker-compose up --build
+#+END_SRC
+
+3. The application will be available at `http://localhost:8080`.
+
+** Configuration
+
+The application can be configured using environment variables. Update the `docker-compose.yml` file to set the necessary variables for Redis, PostgreSQL, and the Go application.
+
+** Contributing
+
+Contributions are welcome! Please fork the repository and submit a pull request for any improvements or bug fixes.
+
+** License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
